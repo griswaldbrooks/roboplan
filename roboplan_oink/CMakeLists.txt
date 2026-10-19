@@ -41,10 +41,10 @@ if(proxsuite_FOUND)
 else()
   message(STATUS "proxsuite not found. Fetching from GitHub...")
 
-  # Disable proxsuite vectorization support (would require Simde) and tests.
+  # Disable proxsuite features not needed by RoboPlan, as well as tests.
   set(BUILD_WITH_VECTORIZATION_SUPPORT
       OFF
-      CACHE INTERNAL "Disable proxsuite vectorization")
+      CACHE INTERNAL "Disable proxsuite vectorization (requires Simde)")
   set(PROXSUITE_BUILD_WITH_SERIALIZATION
       OFF
       CACHE INTERNAL "Disable proxsuite serialization (requires cereal)")
@@ -53,10 +53,6 @@ else()
       CACHE INTERNAL "Disable proxsuite Python bindings")
   set(BUILD_TESTING OFF)
 
-  set(_proxsuite_fetch_extra "")
-  if(CMAKE_VERSION VERSION_GREATER_EQUAL "3.24")
-    list(APPEND _proxsuite_fetch_extra DOWNLOAD_EXTRACT_TIMESTAMP TRUE)
-  endif()
   FetchContent_Declare(
     proxsuite
     GIT_REPOSITORY https://github.com/Simple-Robotics/proxsuite.git
