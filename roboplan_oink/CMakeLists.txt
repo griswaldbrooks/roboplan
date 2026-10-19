@@ -45,6 +45,12 @@ else()
   set(BUILD_WITH_VECTORIZATION_SUPPORT
       OFF
       CACHE INTERNAL "Disable proxsuite vectorization")
+  set(PROXSUITE_BUILD_WITH_SERIALIZATION
+      OFF
+      CACHE INTERNAL "Disable proxsuite serialization (requires cereal)")
+  set(BUILD_PYTHON_INTERFACE
+      OFF
+      CACHE INTERNAL "Disable proxsuite Python bindings")
   set(BUILD_TESTING OFF)
 
   set(_proxsuite_fetch_extra "")
