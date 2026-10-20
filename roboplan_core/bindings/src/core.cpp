@@ -567,10 +567,11 @@ void init_core_path_utils(nanobind::module_& m) {
   nanobind::class_<PathShortcuttingOptions>(m, "PathShortcuttingOptions",
                                             "Options struct for path shortcutting.")
       .def(nanobind::init<const std::string&, double, unsigned int, int, unsigned int, unsigned int,
-                          const ConstraintProjectorOptions&>(),
+                          const ConstraintProjectorOptions&, double>(),
            "group_name"_a = "", "max_step_size"_a = 0.05, "max_iters"_a = 100, "seed"_a = 0,
            "max_convergence_iters"_a = 20, "redundant_removal_iters"_a = 20,
-           "constraint_projection"_a = ConstraintProjectorOptions())
+           "constraint_projection"_a = ConstraintProjectorOptions(),
+           "constrained_min_detour_ratio"_a = 1.1)
       .def_rw("group_name", &PathShortcuttingOptions::group_name,
               "The joint group name to be used for path shortcutting.")
       .def_rw("max_step_size", &PathShortcuttingOptions::max_step_size,
@@ -588,7 +589,11 @@ void init_core_path_utils(nanobind::module_& m) {
           "Cadence (in iterations) at which to interleave the redundant-vertex removal pass that "
           "cleans up the micro-segments introduced by shortcutting. Must be greater than 0.")
       .def_rw("constraint_projection", &PathShortcuttingOptions::constraint_projection,
-              "Options for the projection used when shortcutting with constraints.");
+              "Options for the projection used when shortcutting with constraints.")
+      .def_rw("constrained_min_detour_ratio",
+              &PathShortcuttingOptions::constrained_min_detour_ratio,
+              "With constraints, the ratio of a section's length to the straight distance between "
+              "its ends below which no projected shortcut is attempted.");
 
   nanobind::class_<PathShortcutter>(
       m, "PathShortcutter", "Shortcuts joint paths with random sampling and checking connections.")

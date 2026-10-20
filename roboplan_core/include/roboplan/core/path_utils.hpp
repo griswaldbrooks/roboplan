@@ -133,6 +133,10 @@ struct PathShortcuttingOptions {
   /// @details Its `path_step_size` is the distance between projections along a shortcut that
   /// cannot be connected by a straight line.
   ConstraintProjectorOptions constraint_projection = ConstraintProjectorOptions();
+
+  /// @brief With constraints, the ratio of a section's length to the straight distance between
+  /// its ends below which no projected shortcut is attempted, since one is unlikely to be shorter.
+  double constrained_min_detour_ratio = 1.1;
 };
 
 /// @brief Shortcuts joint paths with random sampling and checking connections.

@@ -836,7 +836,7 @@ def computePathLength(scene: Scene, group_name: str, path: JointPath) -> float:
 class PathShortcuttingOptions:
     """Options struct for path shortcutting."""
 
-    def __init__(self, group_name: str = '', max_step_size: float = 0.05, max_iters: int = 100, seed: int = 0, max_convergence_iters: int = 20, redundant_removal_iters: int = 20, constraint_projection: ConstraintProjectorOptions = ...) -> None: ...
+    def __init__(self, group_name: str = '', max_step_size: float = 0.05, max_iters: int = 100, seed: int = 0, max_convergence_iters: int = 20, redundant_removal_iters: int = 20, constraint_projection: ConstraintProjectorOptions = ..., constrained_min_detour_ratio: float = 1.1) -> None: ...
 
     @property
     def group_name(self) -> str:
@@ -892,6 +892,15 @@ class PathShortcuttingOptions:
 
     @constraint_projection.setter
     def constraint_projection(self, arg: ConstraintProjectorOptions, /) -> None: ...
+
+    @property
+    def constrained_min_detour_ratio(self) -> float:
+        """
+        With constraints, the ratio of a section's length to the straight distance between its ends below which no projected shortcut is attempted.
+        """
+
+    @constrained_min_detour_ratio.setter
+    def constrained_min_detour_ratio(self, arg: float, /) -> None: ...
 
 class PathShortcutter:
     """Shortcuts joint paths with random sampling and checking connections."""

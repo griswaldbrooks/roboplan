@@ -111,8 +111,6 @@ POSTURE_WEIGHT = 0.05
 APPROACH_DISTANCE = 0.1
 CARRY_SPEED = 0.15
 COLLISION_CHECK_STEP_SIZE = 0.02
-# Straight-line motions run close to the object, so they are checked more finely.
-STRAIGHT_CHECK_STEP_SIZE = COLLISION_CHECK_STEP_SIZE / 4.0
 TRAJ_DT = 0.01
 
 

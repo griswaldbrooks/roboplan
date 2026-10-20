@@ -53,8 +53,7 @@ struct RRTOptions {
   bool rrt_connect = false;
 
   /// @brief If true, use the RRT* algorithm to grow asymptotically optimal trees by rewiring.
-  /// @details Compatible with `rrt_connect`, in which case both trees are rewired. Worth enabling
-  /// with constraints, since path shortcutting would likely violate them.
+  /// @details Compatible with `rrt_connect`, in which case both trees are rewired.
   bool rrt_star = false;
 
   /// @brief The configuration-space radius used to find neighbors for RRT* rewiring.

@@ -302,39 +302,41 @@ JointPath PathShortcutter::shortcut(const JointPath& path,
     }
 
     // Ensure the new connection is valid. If not, try again.
+    // Constraint checks are cheaper than collision checks, so they run first.
     std::vector<Eigen::VectorXd> shortcut_configs = {q_low(q_indices), q_high(q_indices)};
-    bool connected = !hasCollisionsAlongPath(*scene_, scene_context, q_low, q_high, max_step_size);
-    if (connected && projector.has_value()) {
+    bool connected = true;
+    if (projector.has_value() && (!projector->satisfies(q_low) || !projector->satisfies(q_high))) {
       // Interpolated samples can fall slightly off the constraints between the checked points of
-      // an edge, and a shortcut can only start and end on them. The pieces of the old edges kept
-      // on either side are checked on their own grid, like every other edge.
-      connected = projector->satisfies(q_low) && projector->satisfies(q_high) &&
-                  projector->satisfiesAlongPath(q_start, q_low, max_step_size,
-                                                /*check_endpoints*/ false) &&
-                  projector->satisfiesAlongPath(q_high, q_end, max_step_size,
-                                                /*check_endpoints*/ false);
-      if (connected && !projector->satisfiesAlongPath(q_low, q_high, max_step_size,
-                                                      /*check_endpoints*/ false)) {
-        // A straight shortcut is never longer than the section it replaces, but a projected one
-        // can be, so measure that section to bound the walk.
-        double section_length = 0.0;
-        auto q_prev = q_low;
-        auto q_next = q_low;
-        for (size_t idx = idx_low; idx < idx_high; ++idx) {
-          q_next(q_indices) = path_configs[idx];
-          section_length += scene_->configurationDistance(q_prev, q_next);
-          q_prev = q_next;
-        }
-        section_length += scene_->configurationDistance(q_prev, q_high);
+      // an edge, and a shortcut can only start and end on them.
+      connected = false;
+    } else if (!projector.has_value() || projector->satisfiesAlongPath(q_low, q_high, max_step_size,
+                                                                       /*check_endpoints*/ false)) {
+      connected = !hasCollisionsAlongPath(*scene_, scene_context, q_low, q_high, max_step_size);
+    } else {
+      // A straight shortcut is never longer than the section it replaces, but a projected one can
+      // be, so measure that section to bound the walk.
+      double section_length = 0.0;
+      auto q_prev = q_low;
+      auto q_next = q_low;
+      for (size_t idx = idx_low; idx < idx_high; ++idx) {
+        q_next(q_indices) = path_configs[idx];
+        section_length += scene_->configurationDistance(q_prev, q_next);
+        q_prev = q_next;
+      }
+      section_length += scene_->configurationDistance(q_prev, q_high);
 
-        const auto maybe_configs =
+      // Skip sections that are already nearly straight, which a walk is unlikely to beat.
+      std::optional<std::vector<Eigen::VectorXd>> maybe_configs;
+      if (section_length >
+          options_.constrained_min_detour_ratio * scene_->configurationDistance(q_low, q_high)) {
+        maybe_configs =
             constrainedConnect(q_low, q_high, section_length, scene_context, *projector);
-        connected = maybe_configs.has_value();
-        if (connected) {
-          shortcut_configs.pop_back();
-          shortcut_configs.insert(shortcut_configs.end(), maybe_configs->begin(),
-                                  maybe_configs->end());
-        }
+      }
+      connected = maybe_configs.has_value();
+      if (connected) {
+        shortcut_configs.pop_back();
+        shortcut_configs.insert(shortcut_configs.end(), maybe_configs->begin(),
+                                maybe_configs->end());
       }
     }
     if (!connected) {
@@ -376,12 +378,13 @@ size_t PathShortcutter::removeRedundantVertices(std::vector<Eigen::VectorXd>& pa
     while (i + 1 < path_configs.size()) {
       q_prev(q_indices) = path_configs[i - 1];
       q_next(q_indices) = path_configs[i + 1];
-      // The neighbors are existing collision-free path nodes, so skip the endpoint checks.
-      if (!hasCollisionsAlongPath(*scene_, scene_context, q_prev, q_next, options_.max_step_size,
-                                  /* bisection */ false, /* check_endpoints */ false) &&
-          (!projector.has_value() ||
+      // The neighbors are existing valid path nodes, so skip the endpoint checks. The cheaper
+      // constraint check runs first.
+      if ((!projector.has_value() ||
            projector->satisfiesAlongPath(q_prev, q_next, options_.max_step_size,
-                                         /* check_endpoints */ false))) {
+                                         /* check_endpoints */ false)) &&
+          !hasCollisionsAlongPath(*scene_, scene_context, q_prev, q_next, options_.max_step_size,
+                                  /* bisection */ false, /* check_endpoints */ false)) {
         path_configs.erase(path_configs.begin() + i);
         ++total_removed;
         removed_any = true;
