@@ -214,7 +214,8 @@ JointPath PathShortcutter::shortcut(const JointPath& path,
   JointPath shortened_path = path;
   auto& path_configs = shortened_path.positions;
 
-  // We sample in the range (0, 1] to prevent modification of the starting configuration.
+  // We sample in the range (0, 1] of the path length to prevent modification of the starting
+  // configuration.
   std::random_device rd;
   std::mt19937 gen(options_.seed < 0 ? rd() : static_cast<unsigned int>(options_.seed));
   std::uniform_real_distribution<double> dis(std::numeric_limits<double>::epsilon(), 1.0);
@@ -252,24 +253,23 @@ JointPath PathShortcutter::shortcut(const JointPath& path,
       }
     }
 
-    // Recompute the path scalings every iteration. If we can't compute these we can
+    // Recompute the path lengths every iteration. If we can't compute these we can
     // assume we are done (the path is at maximum shortness).
-    const auto path_scalings_maybe = getNormalizedPathScaling(shortened_path);
-    if (!path_scalings_maybe.has_value()) {
+    const auto path_lengths_maybe = getPathLengths(shortened_path);
+    if (!path_lengths_maybe.has_value()) {
       break;
     }
-    const auto path_scalings = path_scalings_maybe.value();
+    const auto& path_lengths = path_lengths_maybe.value();
+    const double path_length = path_lengths(path_lengths.size() - 1);
 
-    // Randomly sample two points along the scaled path.
-    double low = dis(gen);
-    double high = dis(gen);
+    // Randomly sample two points along the path.
+    double low = dis(gen) * path_length;
+    double high = dis(gen) * path_length;
     if (low > high) {
       std::swap(low, high);
     }
-    auto [q_low, idx_low] =
-        getConfigurationFromNormalizedPathScaling(shortened_path, path_scalings, low);
-    auto [q_high, idx_high] =
-        getConfigurationFromNormalizedPathScaling(shortened_path, path_scalings, high);
+    auto [q_low, idx_low] = getConfigurationAtPathLength(shortened_path, path_lengths, low);
+    auto [q_high, idx_high] = getConfigurationAtPathLength(shortened_path, path_lengths, high);
 
     // Samples are on the same segment so shortening would have no effect.
     if (idx_high == idx_low) {
@@ -292,12 +292,14 @@ JointPath PathShortcutter::shortcut(const JointPath& path,
     q_start(q_indices) = path_configs[idx_low - 1];
     if (scene_->configurationDistance(q_start, q_low) < max_step_size) {
       q_low = q_start;
+      low = path_lengths(idx_low - 1);
       idx_low--;  // Remove the existing configuration
     }
 
     q_end(q_indices) = path_configs[idx_high];
     if (scene_->configurationDistance(q_high, q_end) < max_step_size) {
       q_high = q_end;
+      high = path_lengths(idx_high);
       idx_high++;  // Remove the existing configuration
     }
 
@@ -314,16 +316,8 @@ JointPath PathShortcutter::shortcut(const JointPath& path,
       connected = !hasCollisionsAlongPath(*scene_, scene_context, q_low, q_high, max_step_size);
     } else {
       // A straight shortcut is never longer than the section it replaces, but a projected one can
-      // be, so measure that section to bound the walk.
-      double section_length = 0.0;
-      auto q_prev = q_low;
-      auto q_next = q_low;
-      for (size_t idx = idx_low; idx < idx_high; ++idx) {
-        q_next(q_indices) = path_configs[idx];
-        section_length += scene_->configurationDistance(q_prev, q_next);
-        q_prev = q_next;
-      }
-      section_length += scene_->configurationDistance(q_prev, q_high);
+      // be, so bound the walk by that section's length.
+      const double section_length = high - low;
 
       // Skip sections that are already nearly straight, which a walk is unlikely to beat.
       std::optional<std::vector<Eigen::VectorXd>> maybe_configs;
@@ -460,36 +454,20 @@ tl::expected<Eigen::VectorXd, std::string> PathShortcutter::getPathLengths(const
   return path_length_list;
 }
 
-tl::expected<Eigen::VectorXd, std::string>
-PathShortcutter::getNormalizedPathScaling(const JointPath& path) {
-  auto path_length_list_maybe = getPathLengths(path);
-  if (!path_length_list_maybe.has_value()) {
-    return path_length_list_maybe;
-  }
-  auto path_length_list = path_length_list_maybe.value();
-  auto path_length = path_length_list(path_length_list.size() - 1);
-
-  // Normalize and return
-  if (path_length > 0.0) {
-    path_length_list /= path_length;
-  }
-
-  return path_length_list;
-}
-
-std::pair<Eigen::VectorXd, size_t> PathShortcutter::getConfigurationFromNormalizedPathScaling(
-    const JointPath& path, const Eigen::VectorXd& path_scalings, double value) {
+std::pair<Eigen::VectorXd, size_t>
+PathShortcutter::getConfigurationAtPathLength(const JointPath& path,
+                                              const Eigen::VectorXd& path_lengths, double length) {
   auto q_start = q_full_;
   auto q_end = q_full_;
-  for (long idx = 1; idx < path_scalings.size() - 1; ++idx) {
-    // Find the first waypoint whose normalized scaling is >= value.
-    if (value > path_scalings(idx)) {
+  for (long idx = 1; idx < path_lengths.size() - 1; ++idx) {
+    // Find the first waypoint whose cumulative length is >= length.
+    if (length > path_lengths(idx)) {
       continue;
     }
 
     // Interpolate to the joint configuration
     const double delta_scale =
-        (value - path_scalings(idx - 1)) / (path_scalings(idx) - path_scalings(idx - 1));
+        (length - path_lengths(idx - 1)) / (path_lengths(idx) - path_lengths(idx - 1));
     q_start(joint_group_info_.q_indices) = path.positions[idx - 1];
     q_end(joint_group_info_.q_indices) = path.positions[idx];
     const Eigen::VectorXd q_interp = scene_->interpolate(q_start, q_end, delta_scale);

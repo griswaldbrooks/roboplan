@@ -917,11 +917,8 @@ class PathShortcutter:
         Computes configuration distances from the start to each pose in a path.
         """
 
-    def getNormalizedPathScaling(self, path: JointPath) -> Annotated[NDArray[numpy.float64], dict(shape=(None,), order='C')]:
-        """Computes length-normalized scaling values along a JointPath."""
-
-    def getConfigurationfromNormalizedPathScaling(self, path: JointPath, path_scalings: Annotated[NDArray[numpy.float64], dict(shape=(None,), order='C')], value: float) -> tuple[Annotated[NDArray[numpy.float64], dict(shape=(None,), order='C')], int]:
-        """Gets joint configurations from a path with normalized joint scalings."""
+    def getConfigurationAtPathLength(self, path: JointPath, path_lengths: Annotated[NDArray[numpy.float64], dict(shape=(None,), order='C')], length: float) -> tuple[Annotated[NDArray[numpy.float64], dict(shape=(None,), order='C')], int]:
+        """Gets the joint configuration at a given length along a path."""
 
 def poseError(a: Annotated[NDArray[numpy.float64], dict(shape=(4, 4), order='F')], b: Annotated[NDArray[numpy.float64], dict(shape=(4, 4), order='F')]) -> tuple[float, float]:
     """

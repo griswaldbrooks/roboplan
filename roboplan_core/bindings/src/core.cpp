@@ -605,12 +605,9 @@ void init_core_path_utils(nanobind::module_& m) {
            "path"_a, "constraints"_a = std::vector<std::shared_ptr<Constraint>>{})
       .def("getPathLengths", unwrap_expected(&PathShortcutter::getPathLengths),
            "Computes configuration distances from the start to each pose in a path.", "path"_a)
-      .def("getNormalizedPathScaling", unwrap_expected(&PathShortcutter::getNormalizedPathScaling),
-           "Computes length-normalized scaling values along a JointPath.", "path"_a)
-      .def("getConfigurationfromNormalizedPathScaling",
-           &PathShortcutter::getConfigurationFromNormalizedPathScaling,
-           "Gets joint configurations from a path with normalized joint scalings.", "path"_a,
-           "path_scalings"_a, "value"_a);
+      .def("getConfigurationAtPathLength", &PathShortcutter::getConfigurationAtPathLength,
+           "Gets the joint configuration at a given length along a path.", "path"_a,
+           "path_lengths"_a, "length"_a);
 }
 
 void init_core_pose_utils(nanobind::module_& m) {

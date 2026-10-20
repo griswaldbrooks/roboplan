@@ -171,21 +171,15 @@ public:
   /// has fewer than two points.
   tl::expected<Eigen::VectorXd, std::string> getPathLengths(const JointPath& path);
 
-  /// @brief Computes length-normalized scaling values along a JointPath.
-  /// @param path The path to length-normalize.
-  /// @return A vector of scaling values between 0.0 and 1.0 at each point in the path if available,
-  /// otherwise an error.
-  tl::expected<Eigen::VectorXd, std::string> getNormalizedPathScaling(const JointPath& path);
-
-  /// @brief Gets joint configurations from a path with normalized joint scalings.
+  /// @brief Gets the joint configuration at a given length along a path.
   /// @param path A JointPath of joint poses.
-  /// @param path_scalings The corresponding path scalings (between 0 and 1) to the provided path.
-  /// @param value A value between 0.0 and 1.0 pointing to the intermediate point along the path.
-  /// @return A pair containing the full-model joint configuration at the scaled value along the
+  /// @param path_lengths The cumulative lengths of the path, from `getPathLengths`.
+  /// @param length The length along the path at which to get the configuration.
+  /// @return A pair containing the full-model joint configuration at that length along the
   ///         path, as well as the index corresponding to the next point along the path.
   std::pair<Eigen::VectorXd, size_t>
-  getConfigurationFromNormalizedPathScaling(const JointPath& path,
-                                            const Eigen::VectorXd& path_scalings, double value);
+  getConfigurationAtPathLength(const JointPath& path, const Eigen::VectorXd& path_lengths,
+                               double length);
 
 private:
   /// @brief Removes interior vertices whose neighbors are directly connectable.
