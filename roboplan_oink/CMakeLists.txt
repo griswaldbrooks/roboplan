@@ -53,10 +53,9 @@ else()
   endif()
   FetchContent_Declare(
     proxsuite
-    URL https://github.com/Simple-Robotics/proxsuite/archive/refs/tags/v0.7.3.tar.gz
-    URL_HASH
-      SHA256=e634babff534c8812c6dbc6b022b1d01f9a2a4a9a73cf87a6dc299a4de996904
-    ${_proxsuite_fetch_extra})
+    GIT_REPOSITORY https://github.com/Simple-Robotics/proxsuite.git
+    GIT_TAG v0.8.0
+    GIT_SHALLOW TRUE)
   FetchContent_MakeAvailable(proxsuite)
 
   # proxsuite creates a non-namespaced target when built via FetchContent.
