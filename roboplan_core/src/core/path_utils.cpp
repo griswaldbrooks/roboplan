@@ -204,7 +204,8 @@ PathShortcutter::PathShortcutter(const std::shared_ptr<Scene> scene,
   q_full_ = scene_->getCurrentJointPositions();
 }
 
-JointPath PathShortcutter::shortcut(const JointPath& path) {
+JointPath PathShortcutter::shortcut(const JointPath& path,
+                                    const std::vector<std::shared_ptr<Constraint>>& constraints) {
 
   const double max_step_size = options_.max_step_size;
   const unsigned int max_convergence_iters = options_.max_convergence_iters;
@@ -221,6 +222,11 @@ JointPath PathShortcutter::shortcut(const JointPath& path) {
   // Snapshot the scene into a private context for this shortcutting pass, so all connection checks
   // below use their own scratch instead of the Scene's shared collision data.
   const SceneContext scene_context(*scene_);
+
+  std::optional<ConstraintProjector> projector;
+  if (!constraints.empty()) {
+    projector.emplace(scene_, options_.group_name, constraints, options_.constraint_projection);
+  }
 
   q_full_ = scene_context.getJointPositions();
   auto q_start = q_full_;
@@ -240,7 +246,7 @@ JointPath PathShortcutter::shortcut(const JointPath& path) {
     // Periodically collapse redundant vertices left behind by corner-cutting shortcuts, so the
     // working path stays compact rather than accumulating unhelpful micro-segments.
     if (i > 0 && i % options_.redundant_removal_iters == 0) {
-      removeRedundantVertices(path_configs, scene_context);
+      removeRedundantVertices(path_configs, scene_context, projector);
       if (path_configs.size() < 3) {
         break;
       }
@@ -296,30 +302,66 @@ JointPath PathShortcutter::shortcut(const JointPath& path) {
     }
 
     // Ensure the new connection is valid. If not, try again.
-    if (hasCollisionsAlongPath(*scene_, scene_context, q_low, q_high, max_step_size)) {
+    std::vector<Eigen::VectorXd> shortcut_configs = {q_low(q_indices), q_high(q_indices)};
+    bool connected = !hasCollisionsAlongPath(*scene_, scene_context, q_low, q_high, max_step_size);
+    if (connected && projector.has_value()) {
+      // Interpolated samples can fall slightly off the constraints between the checked points of
+      // an edge, and a shortcut can only start and end on them. The pieces of the old edges kept
+      // on either side are checked on their own grid, like every other edge.
+      connected = projector->satisfies(q_low) && projector->satisfies(q_high) &&
+                  projector->satisfiesAlongPath(q_start, q_low, max_step_size,
+                                                /*check_endpoints*/ false) &&
+                  projector->satisfiesAlongPath(q_high, q_end, max_step_size,
+                                                /*check_endpoints*/ false);
+      if (connected && !projector->satisfiesAlongPath(q_low, q_high, max_step_size,
+                                                      /*check_endpoints*/ false)) {
+        // A straight shortcut is never longer than the section it replaces, but a projected one
+        // can be, so measure that section to bound the walk.
+        double section_length = 0.0;
+        auto q_prev = q_low;
+        auto q_next = q_low;
+        for (size_t idx = idx_low; idx < idx_high; ++idx) {
+          q_next(q_indices) = path_configs[idx];
+          section_length += scene_->configurationDistance(q_prev, q_next);
+          q_prev = q_next;
+        }
+        section_length += scene_->configurationDistance(q_prev, q_high);
+
+        const auto maybe_configs =
+            constrainedConnect(q_low, q_high, section_length, scene_context, *projector);
+        connected = maybe_configs.has_value();
+        if (connected) {
+          shortcut_configs.pop_back();
+          shortcut_configs.insert(shortcut_configs.end(), maybe_configs->begin(),
+                                  maybe_configs->end());
+        }
+      }
+    }
+    if (!connected) {
       if (max_convergence_iters > 0 && ++empty_iters >= max_convergence_iters) {
         break;
       }
       continue;
     }
 
-    // Erase elements from idx_low to idx_high (exclusive).
+    // Replace elements from idx_low to idx_high (exclusive) with the shortcut.
     path_configs.erase(path_configs.begin() + idx_low, path_configs.begin() + idx_high);
-    path_configs.insert(path_configs.begin() + idx_low, q_high(q_indices).eval());
-    path_configs.insert(path_configs.begin() + idx_low, q_low(q_indices).eval());
+    path_configs.insert(path_configs.begin() + idx_low, shortcut_configs.begin(),
+                        shortcut_configs.end());
 
     // A shortcut was applied, so the path made progress; reset the convergence counter.
     empty_iters = 0;
   }
 
   // Final cleanup pass to collapse any redundant vertices remaining at convergence.
-  removeRedundantVertices(path_configs, scene_context);
+  removeRedundantVertices(path_configs, scene_context, projector);
 
   return shortened_path;
 }
 
 size_t PathShortcutter::removeRedundantVertices(std::vector<Eigen::VectorXd>& path_configs,
-                                                const SceneContext& scene_context) {
+                                                const SceneContext& scene_context,
+                                                std::optional<ConstraintProjector>& projector) {
   const auto& q_indices = joint_group_info_.q_indices;
   auto q_prev = q_full_;
   auto q_next = q_full_;
@@ -336,7 +378,10 @@ size_t PathShortcutter::removeRedundantVertices(std::vector<Eigen::VectorXd>& pa
       q_next(q_indices) = path_configs[i + 1];
       // The neighbors are existing collision-free path nodes, so skip the endpoint checks.
       if (!hasCollisionsAlongPath(*scene_, scene_context, q_prev, q_next, options_.max_step_size,
-                                  /* bisection */ false, /* check_endpoints */ false)) {
+                                  /* bisection */ false, /* check_endpoints */ false) &&
+          (!projector.has_value() ||
+           projector->satisfiesAlongPath(q_prev, q_next, options_.max_step_size,
+                                         /* check_endpoints */ false))) {
         path_configs.erase(path_configs.begin() + i);
         ++total_removed;
         removed_any = true;
@@ -347,6 +392,46 @@ size_t PathShortcutter::removeRedundantVertices(std::vector<Eigen::VectorXd>& pa
   }
 
   return total_removed;
+}
+
+std::optional<std::vector<Eigen::VectorXd>>
+PathShortcutter::constrainedConnect(const Eigen::VectorXd& q_start, const Eigen::VectorXd& q_end,
+                                    double max_length, const SceneContext& scene_context,
+                                    ConstraintProjector& projector) {
+  // Mirrors the constrained extension in RRT::growTree.
+  const auto& q_indices = joint_group_info_.q_indices;
+  const double step_size = options_.constraint_projection.path_step_size;
+
+  std::vector<Eigen::VectorXd> configs;
+  Eigen::VectorXd q_current = q_start;
+  double distance_to_end = scene_->configurationDistance(q_current, q_end);
+  double length = 0.0;
+  while (distance_to_end > 0.0) {
+    // The last step lands exactly on `q_end`, which already satisfies the constraints.
+    Eigen::VectorXd q_next = q_end;
+    if (distance_to_end > step_size) {
+      q_next = scene_->interpolate(q_current, q_end, step_size / distance_to_end);
+      if (!projector.project(q_next)) {
+        return std::nullopt;
+      }
+    }
+
+    const double step_distance = scene_->configurationDistance(q_current, q_next);
+    const double distance_from_end = scene_->configurationDistance(q_next, q_end);
+    length += step_distance;
+    if (distance_from_end >= distance_to_end || step_distance > 2.0 * step_size ||
+        length + distance_from_end >= max_length || !scene_->isValidConfiguration(q_next) ||
+        hasCollisionsAlongPath(*scene_, scene_context, q_current, q_next, options_.max_step_size) ||
+        !projector.satisfiesAlongPath(q_current, q_next, options_.max_step_size,
+                                      /*check_endpoints*/ false)) {
+      return std::nullopt;
+    }
+
+    configs.push_back(q_next(q_indices));
+    q_current = q_next;
+    distance_to_end = distance_from_end;
+  }
+  return configs;
 }
 
 tl::expected<Eigen::VectorXd, std::string> PathShortcutter::getPathLengths(const JointPath& path) {

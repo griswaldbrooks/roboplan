@@ -182,13 +182,8 @@ Keeping a gripper upright inside a safe zone is a single ``PoseConstraint``:
 
    import numpy as np
    import pinocchio as pin
-   from roboplan.rrt import (
-       ConstraintProjector,
-       ConstraintProjectorOptions,
-       PoseConstraint,
-       RRT,
-       RRTOptions,
-   )
+   from roboplan.core import ConstraintProjector, ConstraintProjectorOptions, PoseConstraint
+   from roboplan.rrt import RRT, RRTOptions
 
    # The region frame is the nominal pose. A half turn about x points the gripper straight down,
    # so a zero displacement means perfectly upright.

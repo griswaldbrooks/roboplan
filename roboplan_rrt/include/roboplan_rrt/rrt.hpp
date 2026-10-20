@@ -10,10 +10,10 @@
 
 #include <tl/expected.hpp>
 
+#include <roboplan/core/constraints.hpp>
 #include <roboplan/core/scene.hpp>
 #include <roboplan/core/scene_context.hpp>
 #include <roboplan/core/types.hpp>
-#include <roboplan_rrt/constraints.hpp>
 #include <roboplan_rrt/graph.hpp>
 #include <roboplan_rrt/kd_tree.hpp>
 

@@ -22,19 +22,16 @@ import itertools
 
 from roboplan.core import (
     CartesianConfiguration,
+    ConstraintProjector,
+    ConstraintProjectorOptions,
     JointConfiguration,
+    PoseConstraint,
     Scene,
     loadJointLimitsConfig,
     loadUrdfSceneDescriptionFromXml,
 )
 from roboplan.example_models import get_package_share_dir
-from roboplan.rrt import (
-    RRT,
-    ConstraintProjector,
-    ConstraintProjectorOptions,
-    PoseConstraint,
-    RRTOptions,
-)
+from roboplan.rrt import RRT, RRTOptions
 from roboplan.simple_ik import SimpleIk, SimpleIkOptions
 from roboplan.toppra import PathParameterizerTOPPRA, SplineFittingMode, TOPPRAOptions
 from roboplan.visualization import addPositionPolyline, visualizeJointTrajectory
