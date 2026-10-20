@@ -25,6 +25,8 @@ from roboplan.core import (
     ConstraintProjector,
     ConstraintProjectorOptions,
     JointConfiguration,
+    PathShortcutter,
+    PathShortcuttingOptions,
     PoseConstraint,
     Scene,
     loadJointLimitsConfig,
@@ -208,6 +210,7 @@ def main(
     max_nodes: int = 40000,
     max_planning_time: float = 1.0,
     collision_check_step_size: float = 0.05,
+    shortcut_step_size: float = 0.01,
     rrt_star: bool = True,
     rewire_distance: float = 1.0,
     host: str = "localhost",
@@ -236,6 +239,8 @@ def main(
         max_planning_time: The planning time budget, all of which is spent optimizing.
         collision_check_step_size: Step size for collision checking, which is also the resolution
             at which constraints are verified along an edge.
+        shortcut_step_size: Step size for checking shortcuts. Finer than the planner's, since
+            long shortcut edges can otherwise clip the pillar between checks.
         rrt_star: Whether to rewire the trees as they grow, which collapses the zigzag that walking
             in small projected hops leaves behind.
         rewire_distance: The maximum distance between nodes to consider them for rewiring.
@@ -384,6 +389,14 @@ def main(
     rrt = RRT(scene, options)
     rrt.setRngSeed(rng_seed)
 
+    shortcutter = PathShortcutter(
+        scene,
+        PathShortcuttingOptions(
+            group_name=group_name,
+            max_step_size=shortcut_step_size,
+            constraint_projection=projection_opts,
+        ),
+    )
     toppra = PathParameterizerTOPPRA(scene, group_name)
     traj_dt = 0.01
 
@@ -434,6 +447,8 @@ def main(
                 return
             elapsed = time.time() - t_start
             print(f"  Found {len(path.positions)} waypoints in {elapsed:.3f} s")
+            path = shortcutter.shortcut(path, [constraint])
+            print(f"  Shortcut to {len(path.positions)} waypoints")
             metrics = measure_path(scene, path, nominal_z, group_name, ee_name)
             print_metrics("constrained", metrics, tilt_limit, position_slack)
 
